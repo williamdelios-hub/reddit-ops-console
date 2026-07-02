@@ -42,8 +42,37 @@ export type DispatchMeta = {
   scannedPosts: number;
 };
 
+export type OperatorDocument = {
+  configured: boolean;
+  label: string;
+  fileName: string;
+  sha256: string;
+  content: string;
+  updatedAt: string;
+};
+
+export type OperatorProfile = {
+  version: 1;
+  displayName: string;
+  voice: OperatorDocument;
+  productBrief: OperatorDocument;
+  scheduler: {
+    provider: "codex" | "claude-code" | "unconfigured";
+    cadence: string;
+    active: boolean;
+    updatedAt: string;
+  };
+  workflow: {
+    discovery: "composio-reddit";
+    storage: "netlify-blobs";
+    publishing: "manual-approval-only";
+  };
+  configuredAt: string;
+};
+
 const STORE_NAME = "reddit-dispatch";
 const META_KEY = "meta/current";
+const OPERATOR_KEY = "operator/profile";
 
 function store() {
   return getStore({ name: STORE_NAME, consistency: "strong" });
@@ -67,6 +96,14 @@ export async function getMeta() {
 
 export async function setMeta(meta: DispatchMeta) {
   await store().setJSON(META_KEY, meta);
+}
+
+export async function getOperatorProfile() {
+  return (await store().get(OPERATOR_KEY, { type: "json" })) as OperatorProfile | null;
+}
+
+export async function setOperatorProfile(profile: OperatorProfile) {
+  await store().setJSON(OPERATOR_KEY, profile);
 }
 
 export async function getItem(thingId: string) {

@@ -14,6 +14,16 @@ export type RedditAccount = {
   is_default?: boolean;
 };
 
+type SearchPayload = {
+  data?: {
+    session?: { id?: string };
+    toolkit_connection_statuses?: Array<{
+      toolkit?: string;
+      accounts?: RedditAccount[];
+    }>;
+  };
+};
+
 function requiredEnv(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -45,9 +55,9 @@ export async function searchReddit(
   return parseToolText(result);
 }
 
-export function activeRedditAccount(searchPayload: any): RedditAccount | null {
+export function activeRedditAccount(searchPayload: SearchPayload): RedditAccount | null {
   const statuses = searchPayload?.data?.toolkit_connection_statuses || [];
-  const reddit = statuses.find((entry: any) => entry.toolkit === "reddit");
+  const reddit = statuses.find((entry) => entry.toolkit === "reddit");
   return (
     reddit?.accounts?.find((account: RedditAccount) => account.status === "ACTIVE" && account.is_default) ||
     reddit?.accounts?.find((account: RedditAccount) => account.status === "ACTIVE") ||
@@ -55,7 +65,7 @@ export function activeRedditAccount(searchPayload: any): RedditAccount | null {
   );
 }
 
-export function searchSessionId(searchPayload: any) {
+export function searchSessionId(searchPayload: SearchPayload) {
   return searchPayload?.data?.session?.id || undefined;
 }
 

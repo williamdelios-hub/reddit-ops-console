@@ -15,7 +15,7 @@ export default async (request: Request) => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!isSameOrigin(request) || !hasValidSession(request)) return json({ error: "Unauthorized" }, 401);
 
-  const body = await request.json().catch(() => ({})) as any;
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
   const thingId = typeof body?.thingId === "string" ? body.thingId.trim().toLowerCase() : "";
   const text = typeof body?.text === "string" ? body.text.trim() : "";
   if (!THING_ID.test(thingId)) return json({ error: "A valid Reddit target is required" }, 400);

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { secret } from "./secrets.mts";
+import { dispatchBaseUrl } from "./runtime-config.mts";
 
 function option(name: string) {
   const index = process.argv.indexOf(name);
@@ -10,7 +11,7 @@ const inputPath = option("--input");
 if (!inputPath) throw new Error("Use --input <draft-batch.json>");
 const payload = JSON.parse(await readFile(inputPath, "utf8"));
 const ingestKey = secret("DISPATCH_INGEST_KEY", "reddit-dispatch-console-ingest");
-const baseUrl = process.env.DISPATCH_BASE_URL || "https://reddit-dispatch-console.netlify.app";
+const baseUrl = await dispatchBaseUrl();
 const response = await fetch(`${baseUrl}/.netlify/functions/ingest-drafts`, {
   method: "POST",
   headers: {

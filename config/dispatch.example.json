@@ -1,0 +1,8 @@
+{
+  "displayName": "Operator",
+  "provider": "codex",
+  "cadence": "Four checks per day",
+  "voicePath": "automation/operator/VOICE.md",
+  "productBriefPath": "automation/operator/PRODUCT_BRIEF.md",
+  "publishing": "manual-approval-only"
+}

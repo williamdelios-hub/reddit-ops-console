@@ -1,13 +1,17 @@
 import { hasValidSession } from "./_shared/auth.mts";
 import { json } from "./_shared/http.mts";
-import { getMeta, listItems } from "./_shared/store.mts";
+import { getMeta, getOperatorProfile, listItems } from "./_shared/store.mts";
 
 export default async (request: Request) => {
   if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
   if (!hasValidSession(request)) return json({ error: "Unauthorized" }, 401);
 
   try {
-    const [meta, items] = await Promise.all([getMeta(), listItems()]);
+    const [meta, items, operatorProfile] = await Promise.all([
+      getMeta(),
+      listItems(),
+      getOperatorProfile(),
+    ]);
     const awaiting = items
       .filter((item) => item.status === "awaiting")
       .sort((left, right) => (right.createdUtc || 0) - (left.createdUtc || 0));
@@ -25,6 +29,7 @@ export default async (request: Request) => {
       lastSyncAt: meta.lastSyncAt,
       awaiting,
       sent,
+      operatorProfile,
     });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Could not load the approval queue" }, 502);

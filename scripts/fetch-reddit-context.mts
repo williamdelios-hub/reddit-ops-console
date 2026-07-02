@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { connectComposio, activeRedditAccount, runWorkbench, searchReddit, searchSessionId } from "../netlify/functions/_shared/composio-connect.mts";
 import { buildDiscoveryProgram, parseWorkbenchOutput } from "../netlify/functions/_shared/discovery-program.mts";
 import { secret } from "./secrets.mts";
+import { dispatchBaseUrl } from "./runtime-config.mts";
 
 function option(name: string) {
   const index = process.argv.indexOf(name);
@@ -13,7 +14,17 @@ process.env.COMPOSIO_CONNECT_API_KEY ||= secret(
   "reddit-dispatch-console-composio-connect",
 );
 const ingestKey = secret("DISPATCH_INGEST_KEY", "reddit-dispatch-console-ingest");
-const baseUrl = process.env.DISPATCH_BASE_URL || "https://reddit-dispatch-console.netlify.app";
+const baseUrl = await dispatchBaseUrl();
+
+type Candidate = { thingId?: string } & Record<string, unknown>;
+type DiscoveryResult = {
+  error?: string;
+  owner?: string;
+  accountId?: string;
+  scannedPosts?: number;
+  candidates?: Candidate[];
+  postContexts?: unknown[];
+};
 
 const client = await connectComposio();
 const search = await searchReddit(client, [
@@ -27,17 +38,20 @@ const workbench = await runWorkbench(
   buildDiscoveryProgram(account.user_info.name, account.id),
   searchSessionId(search),
 );
-const discovered = parseWorkbenchOutput(workbench?.data?.stdout || "");
+const discovered = parseWorkbenchOutput(workbench?.data?.stdout || "") as DiscoveryResult;
 if (discovered.error) throw new Error(discovered.error);
 
 const contextResponse = await fetch(`${baseUrl}/.netlify/functions/automation-context`, {
   headers: { Authorization: `Bearer ${ingestKey}` },
 });
 if (!contextResponse.ok) throw new Error(`Dispatch context request failed with ${contextResponse.status}`);
-const context = await contextResponse.json() as { seen?: Record<string, string> };
+const context = await contextResponse.json() as {
+  seen?: Record<string, string>;
+  operatorProfile?: unknown;
+};
 const seen = context.seen || {};
 const candidates = Array.isArray(discovered.candidates)
-  ? discovered.candidates.filter((candidate: any) => !seen[candidate.thingId])
+  ? discovered.candidates.filter((candidate) => candidate.thingId && !seen[candidate.thingId])
   : [];
 const output = {
   owner: discovered.owner,
@@ -46,6 +60,7 @@ const output = {
   discoveredCount: candidates.length,
   candidates,
   postContexts: discovered.postContexts || [],
+  operatorProfile: context.operatorProfile || null,
   fetchedAt: new Date().toISOString(),
 };
 const serialized = `${JSON.stringify(output, null, 2)}\n`;

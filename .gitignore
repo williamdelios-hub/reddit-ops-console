@@ -4,7 +4,10 @@ dist
 .env
 .env.*
 !.env.example
+.dispatch.env
+automation/operator/
 .DS_Store
 artifacts/screenshots
+artifacts/design/
 *.tsbuildinfo
 deno.lock

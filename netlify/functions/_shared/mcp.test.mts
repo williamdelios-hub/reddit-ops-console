@@ -18,7 +18,7 @@ describe("parseMcpPayload", () => {
 
 describe("parseWorkbenchOutput", () => {
   it("ignores helper logs and reads the final JSON line", () => {
-    const output = '[INFO] Fetching Reddit\n{"owner":"person-person12","candidates":[]}\n';
-    expect(parseWorkbenchOutput(output)).toEqual({ owner: "person-person12", candidates: [] });
+    const output = '[INFO] Fetching Reddit\n{"owner":"sample-owner","candidates":[]}\n';
+    expect(parseWorkbenchOutput(output)).toEqual({ owner: "sample-owner", candidates: [] });
   });
 });
