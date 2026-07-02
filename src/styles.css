@@ -1253,7 +1253,7 @@ button {
 }
 
 @media (max-width: 700px) {
-  .topbar-actions .text-button:first-of-type {
+  .topbar-actions .reload-button {
     display: none;
   }
 

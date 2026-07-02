@@ -55,7 +55,7 @@ export function DispatchConsole({ onLogout }: Props) {
           </span>
           <span className="topbar-sync">{formatSync(queue.lastSyncAt)}</span>
           {consoleView === "queue" ? (
-            <button className="text-button" type="button" onClick={() => void queue.loadQueue()} disabled={queue.loading}>
+            <button className="text-button reload-button" type="button" onClick={() => void queue.loadQueue()} disabled={queue.loading}>
               {queue.loading ? "Reloading" : "Reload"}
             </button>
           ) : null}
