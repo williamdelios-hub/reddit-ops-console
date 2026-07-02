@@ -1,13 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "./lib/api";
-import {
-  addHistory,
-  loadHistory,
-  loadQueueState,
-  markQueueItem,
-  saveQueueEdit,
-  type SendRecord,
-} from "./lib/storage";
+
+type QueueStatus = "awaiting" | "sending" | "sent" | "skipped";
 
 type QueueItem = {
   thingId: string;
@@ -24,6 +18,11 @@ type QueueItem = {
   postPermalink: string;
   draft: string;
   rationale: string;
+  batchId: string;
+  status: QueueStatus;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
 };
 
 type QueueResponse = {
@@ -31,11 +30,14 @@ type QueueResponse = {
   owner: string;
   accountId: string;
   scannedPosts: number;
-  drafts: QueueItem[];
-  generatedAt: string;
+  latestBatchId: string | null;
+  lastSyncAt: string | null;
+  awaiting: QueueItem[];
+  sent: QueueItem[];
 };
 
 type Notice = { kind: "success" | "error"; message: string } | null;
+type QueueView = "latest" | "all";
 
 function formatAge(createdUtc: number | null) {
   if (!createdUtc) return "recent";
@@ -44,6 +46,16 @@ function formatAge(createdUtc: number | null) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+function formatSync(value: string | null) {
+  if (!value) return "No scheduled check yet";
+  return `Last checked ${new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value))}`;
 }
 
 function LoginScreen({ onLogin }: { onLogin: () => void }) {
@@ -97,8 +109,8 @@ function LoadingQueue() {
   return (
     <div className="queue-loading" role="status">
       <div className="loading-rule" aria-hidden="true" />
-      <strong>Building your review queue</strong>
-      <span>Reading recent threads, removing answered comments, and drafting replies.</span>
+      <strong>Loading saved drafts</strong>
+      <span>Opening the latest scheduled batch from your private queue.</span>
     </div>
   );
 }
@@ -110,15 +122,24 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [owner, setOwner] = useState("");
   const [scannedPosts, setScannedPosts] = useState(0);
-  const [drafts, setDrafts] = useState<QueueItem[]>([]);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [latestBatchId, setLatestBatchId] = useState<string | null>(null);
+  const [awaiting, setAwaiting] = useState<QueueItem[]>([]);
+  const [sent, setSent] = useState<QueueItem[]>([]);
+  const [view, setView] = useState<QueueView>("latest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
-  const [history, setHistory] = useState<SendRecord[]>(() => loadHistory());
 
+  const latest = useMemo(
+    () => awaiting.filter((item) => item.batchId === latestBatchId),
+    [awaiting, latestBatchId],
+  );
+  const visible = view === "latest" ? latest : awaiting;
   const selected = useMemo(
-    () => drafts.find((item) => item.thingId === selectedId) || drafts[0] || null,
-    [drafts, selectedId],
+    () => visible.find((item) => item.thingId === selectedId) || visible[0] || null,
+    [visible, selectedId],
   );
 
   useEffect(() => {
@@ -132,84 +153,91 @@ export default function App() {
     if (authenticated) void loadQueue();
   }, [authenticated]);
 
+  useEffect(() => {
+    setSelectedId((current) => visible.some((item) => item.thingId === current) ? current : visible[0]?.thingId || null);
+  }, [visible]);
+
   async function loadQueue() {
     setLoading(true);
     setNotice(null);
     try {
       const response = await api<QueueResponse>("queue");
-      const local = loadQueueState();
-      const ready = response.drafts
-        .filter((item) => !local.handled[item.thingId])
-        .map((item) => ({ ...item, draft: local.edits[item.thingId] ?? item.draft }));
       setConnected(response.connected);
       setOwner(response.owner);
       setScannedPosts(response.scannedPosts);
-      setDrafts(ready);
-      setSelectedId((current) =>
-        ready.some((item) => item.thingId === current) ? current : ready[0]?.thingId || null,
-      );
+      setLastSyncAt(response.lastSyncAt);
+      setLatestBatchId(response.latestBatchId);
+      setAwaiting(response.awaiting);
+      setSent(response.sent);
     } catch (error) {
-      setConnected(false);
       setNotice({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not build the approval queue",
+        message: error instanceof Error ? error.message : "Could not load the approval queue",
       });
     } finally {
       setLoading(false);
     }
   }
 
-  function editSelected(text: string) {
+  function editSelected(draft: string) {
     if (!selected) return;
-    setDrafts((current) =>
-      current.map((item) => (item.thingId === selected.thingId ? { ...item, draft: text } : item)),
-    );
-    saveQueueEdit(selected.thingId, text);
+    setAwaiting((current) => current.map((item) => (
+      item.thingId === selected.thingId ? { ...item, draft } : item
+    )));
   }
 
-  function removeFromQueue(thingId: string, status: "sent" | "skipped") {
-    markQueueItem(thingId, status);
-    setDrafts((current) => {
-      const index = current.findIndex((item) => item.thingId === thingId);
-      const next = current.filter((item) => item.thingId !== thingId);
-      setSelectedId(next[Math.min(Math.max(index, 0), Math.max(next.length - 1, 0))]?.thingId || null);
-      return next;
-    });
+  async function saveSelected() {
+    if (!selected?.draft.trim()) return;
+    setSavingId(selected.thingId);
+    try {
+      await api("queue-item", {
+        method: "POST",
+        body: { action: "edit", thingId: selected.thingId, draft: selected.draft },
+      });
+    } catch (error) {
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Draft edit was not saved" });
+    } finally {
+      setSavingId(null);
+    }
   }
 
-  function skipSelected() {
+  function removeFromQueue(thingId: string) {
+    setAwaiting((current) => current.filter((item) => item.thingId !== thingId));
+  }
+
+  async function skipSelected() {
     if (!selected) return;
-    removeFromQueue(selected.thingId, "skipped");
-    setNotice({ kind: "success", message: "Skipped. It will not return to this browser queue." });
+    const target = selected;
+    try {
+      await api("queue-item", { method: "POST", body: { action: "skip", thingId: target.thingId } });
+      removeFromQueue(target.thingId);
+      setNotice({ kind: "success", message: "Skipped. This comment will not return in a later batch." });
+    } catch (error) {
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Could not skip this reply" });
+    }
   }
 
   async function sendSelected() {
     if (!selected || !selected.draft.trim()) return;
-    setSendingId(selected.thingId);
+    const target = selected;
+    setSendingId(target.thingId);
     setNotice(null);
     try {
       await api("send-reply", {
         method: "POST",
-        body: { thingId: selected.thingId, text: selected.draft },
+        body: { thingId: target.thingId, text: target.draft },
       });
-      const record: SendRecord = {
-        id: crypto.randomUUID(),
-        createdAt: new Date().toISOString(),
-        targetUrl: selected.permalink,
-        thingId: selected.thingId,
-        author: selected.author,
-        subreddit: selected.subreddit,
-        text: selected.draft.trim(),
-        successful: true,
+      const sentItem: QueueItem = {
+        ...target,
+        status: "sent",
+        sentAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-      setHistory(addHistory(record));
-      removeFromQueue(selected.thingId, "sent");
-      setNotice({ kind: "success", message: `Reply sent to u/${selected.author}.` });
+      setSent((current) => [sentItem, ...current].slice(0, 20));
+      removeFromQueue(target.thingId);
+      setNotice({ kind: "success", message: `Reply sent to u/${target.author}.` });
     } catch (error) {
-      setNotice({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Reddit did not accept the reply",
-      });
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Reddit did not accept the reply" });
     } finally {
       setSendingId(null);
     }
@@ -220,7 +248,8 @@ export default function App() {
       await api("logout", { method: "POST" });
     } finally {
       setAuthenticated(false);
-      setDrafts([]);
+      setAwaiting([]);
+      setSent([]);
     }
   }
 
@@ -241,15 +270,16 @@ export default function App() {
         <div className="brand-cluster">
           <div className="wordmark">Dispatch</div>
           <div className="queue-title">Approval queue</div>
-          <strong className="ready-count">{drafts.length} ready</strong>
+          <strong className="ready-count">{awaiting.length} ready</strong>
         </div>
         <div className="topbar-actions">
           <span className={`connection-dot ${connected ? "is-online" : ""}`} aria-hidden="true" />
           <span className="topbar-status">
-            {connected && owner ? `Connected as u/${owner}` : loading ? "Checking Reddit" : "Reddit unavailable"}
+            {connected && owner ? `Connected as u/${owner}` : "Awaiting first scheduled check"}
           </span>
+          <span className="topbar-sync">{formatSync(lastSyncAt)}</span>
           <button className="text-button" type="button" onClick={() => void loadQueue()} disabled={loading}>
-            {loading ? "Refreshing" : "Refresh"}
+            {loading ? "Reloading" : "Reload"}
           </button>
           <button className="text-button" type="button" onClick={logout}>Log out</button>
         </div>
@@ -266,10 +296,28 @@ export default function App() {
         <aside className="queue-rail" aria-label="Unanswered comment queue">
           <div className="rail-heading">
             <span>Unanswered</span>
-            <strong>{drafts.length}</strong>
+            <strong>{visible.length}</strong>
+          </div>
+          <div className="queue-filters" aria-label="Queue view">
+            <button
+              type="button"
+              className={view === "latest" ? "is-active" : ""}
+              aria-pressed={view === "latest"}
+              onClick={() => setView("latest")}
+            >
+              Latest batch <span>{latest.length}</span>
+            </button>
+            <button
+              type="button"
+              className={view === "all" ? "is-active" : ""}
+              aria-pressed={view === "all"}
+              onClick={() => setView("all")}
+            >
+              All awaiting <span>{awaiting.length}</span>
+            </button>
           </div>
           <div className="queue-items">
-            {drafts.map((item) => (
+            {visible.map((item) => (
               <button
                 type="button"
                 className={`queue-item ${selected?.thingId === item.thingId ? "is-selected" : ""}`}
@@ -286,10 +334,10 @@ export default function App() {
                 <span className="queue-signal">Draft ready</span>
               </button>
             ))}
-            {!loading && drafts.length === 0 ? (
+            {!loading && visible.length === 0 ? (
               <div className="queue-empty-small">
-                <strong>Queue clear</strong>
-                <span>{scannedPosts ? `${scannedPosts} recent threads checked.` : "No drafts are waiting."}</span>
+                <strong>{view === "latest" ? "No drafts in the latest batch" : "Queue clear"}</strong>
+                <span>{view === "latest" && awaiting.length ? "Older drafts are still available under All awaiting." : `${scannedPosts || 0} recent threads checked.`}</span>
               </div>
             ) : null}
           </div>
@@ -300,9 +348,15 @@ export default function App() {
           {!loading && !selected ? (
             <div className="review-empty">
               <p className="eyebrow">Nothing waiting</p>
-              <h1>Your queue is clear.</h1>
-              <p>Dispatch checked your recent Reddit threads and found no unanswered comments worth drafting.</p>
-              <button className="secondary-button" type="button" onClick={() => void loadQueue()}>Check again</button>
+              <h1>{view === "latest" && awaiting.length ? "Latest batch is clear." : "Your queue is clear."}</h1>
+              <p>
+                {view === "latest" && awaiting.length
+                  ? "Older proposed replies are still waiting in All awaiting."
+                  : "The next scheduled Codex check will add new proposed replies here for your review."}
+              </p>
+              {view === "latest" && awaiting.length ? (
+                <button className="secondary-button" type="button" onClick={() => setView("all")}>See all awaiting</button>
+              ) : null}
             </div>
           ) : null}
           {selected ? (
@@ -330,19 +384,22 @@ export default function App() {
                     <span className="section-label">Proposed reply</span>
                     <p>Edit anything you want, then send.</p>
                   </div>
-                  <span className="generated-label">Auto-generated draft</span>
+                  <span className="generated-label">Codex scheduled draft</span>
                 </div>
                 <textarea
                   aria-label="Proposed reply"
                   value={selected.draft}
                   onChange={(event) => editSelected(event.target.value.slice(0, 10_000))}
+                  onBlur={() => void saveSelected()}
                   maxLength={10_000}
                 />
-                <div className="character-count">{selected.draft.length.toLocaleString()} / 10,000</div>
+                <div className="character-count">
+                  {savingId === selected.thingId ? "Saving" : `${selected.draft.length.toLocaleString()} / 10,000`}
+                </div>
               </section>
 
               <div className="review-actions">
-                <button className="secondary-button" type="button" onClick={skipSelected} disabled={Boolean(sendingId)}>
+                <button className="secondary-button" type="button" onClick={() => void skipSelected()} disabled={Boolean(sendingId)}>
                   Skip
                 </button>
                 <a className="secondary-button" href={selected.permalink} target="_blank" rel="noreferrer">
@@ -365,17 +422,17 @@ export default function App() {
       <section className="sent-strip" aria-labelledby="sent-title">
         <div className="sent-heading">
           <span id="sent-title">Recently sent</span>
-          <strong>{history.length}</strong>
+          <strong>{sent.length}</strong>
         </div>
         <div className="sent-items">
-          {history.slice(0, 5).map((record) => (
-            <a href={record.targetUrl} target="_blank" rel="noreferrer" key={record.id} className="sent-item">
-              <span>Sent to u/{record.author}</span>
-              <small>r/{record.subreddit}</small>
-              <p>{record.text}</p>
+          {sent.slice(0, 5).map((item) => (
+            <a href={item.permalink} target="_blank" rel="noreferrer" key={item.thingId} className="sent-item">
+              <span>Sent to u/{item.author}</span>
+              <small>r/{item.subreddit}</small>
+              <p>{item.draft}</p>
             </a>
           ))}
-          {history.length === 0 ? <p className="sent-empty">Approved replies will appear here.</p> : null}
+          {sent.length === 0 ? <p className="sent-empty">Approved replies will appear here.</p> : null}
         </div>
       </section>
     </div>

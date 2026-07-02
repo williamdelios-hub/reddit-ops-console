@@ -66,9 +66,9 @@ export async function runWorkbench(
 ) {
   const result = await client.callTool<ToolResult>("COMPOSIO_REMOTE_WORKBENCH", {
     code_to_execute: code,
-    thought: "Build the human-reviewed Reddit reply queue",
-    current_step: "GENERATING_REPLIES",
-    current_step_metric: "0/12 drafts",
+    thought: "Read recent Reddit threads for the private approval workflow",
+    current_step: "READING_REDDIT",
+    current_step_metric: "0/10 threads",
     ...(sessionId ? { session_id: sessionId } : {}),
   });
   return parseToolText(result);

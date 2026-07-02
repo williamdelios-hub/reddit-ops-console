@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseMcpPayload } from "./mcp.mts";
-import { parseWorkbenchOutput } from "./queue-program.mts";
+import { parseWorkbenchOutput } from "./discovery-program.mts";
 
 describe("parseMcpPayload", () => {
   it("parses a JSON response", () => {
@@ -18,7 +18,7 @@ describe("parseMcpPayload", () => {
 
 describe("parseWorkbenchOutput", () => {
   it("ignores helper logs and reads the final JSON line", () => {
-    const output = '[INFO] Fetching Reddit\n{"owner":"person-person12","drafts":[]}\n';
-    expect(parseWorkbenchOutput(output)).toEqual({ owner: "person-person12", drafts: [] });
+    const output = '[INFO] Fetching Reddit\n{"owner":"person-person12","candidates":[]}\n';
+    expect(parseWorkbenchOutput(output)).toEqual({ owner: "person-person12", candidates: [] });
   });
 });

@@ -1,4 +1,4 @@
-export function buildQueueProgram(owner: string, accountId: string) {
+export function buildDiscoveryProgram(owner: string, accountId: string) {
   const ownerLiteral = JSON.stringify(owner);
   const accountLiteral = JSON.stringify(accountId);
 
@@ -8,7 +8,7 @@ account_id = ${accountLiteral}
 
 search_response, search_error = run_composio_tool(
     "REDDIT_SEARCH_ACROSS_SUBREDDITS",
-    {"search_query": "author:" + owner, "sort": "new", "limit": 10, "restrict_sr": False},
+    {"search_query": "author:" + owner, "sort": "new", "limit": 25, "restrict_sr": False},
     account=account_id
 )
 if search_error:
@@ -17,9 +17,8 @@ else:
     search_data = (search_response or {}).get("data") or {}
     posts = search_data.get("posts") or (((search_data.get("data") or {}).get("posts")) or [])
     posts = [p for p in posts if (p.get("num_comments") or 0) > 0 and not p.get("locked") and not p.get("archived")]
-    posts = sorted(posts, key=lambda p: p.get("created_utc") or 0, reverse=True)[:4]
+    posts = sorted(posts, key=lambda p: p.get("created_utc") or 0, reverse=True)[:10]
     candidates = []
-    style_examples = []
     post_contexts = []
 
     for post in posts:
@@ -30,7 +29,7 @@ else:
             "GET",
             "/comments/" + post_id,
             "reddit",
-            query_params={"limit": "100", "depth": "10", "sort": "new", "raw_json": "1"}
+            query_params={"limit": "250", "depth": "10", "sort": "new", "raw_json": "1"}
         )
         if thread_error or not isinstance(thread, list) or len(thread) < 2:
             continue
@@ -55,9 +54,6 @@ else:
         for data, children in flat:
             author = data.get("author") or ""
             body = data.get("body") or ""
-            if author == owner and body not in ["[deleted]", "[removed]"]:
-                style_examples.append(body)
-                continue
             parent_id = data.get("parent_id") or ""
             parent = by_name.get(parent_id) or {}
             directly_to_owner = parent_id == root_name or parent.get("author") == owner
@@ -73,7 +69,7 @@ else:
                 and author not in [owner, "[deleted]", "AutoModerator"]
                 and not normalized_author.endswith("bot")
                 and body not in ["[deleted]", "[removed]"]
-                and len(body.strip()) >= 12
+                and len(body.strip()) >= 8
             ):
                 permalink = data.get("permalink") or ""
                 if permalink.startswith("/"):
@@ -96,60 +92,20 @@ else:
         post_contexts.append({
             "id": post_id,
             "title": post_data.get("title") or post.get("title"),
-            "selftext": (post_data.get("selftext") or post.get("selftext") or "")[:7000]
+            "selftext": (post_data.get("selftext") or post.get("selftext") or "")[:12000]
         })
 
     deduped = {}
     for candidate in sorted(candidates, key=lambda item: item.get("createdUtc") or 0, reverse=True):
         if candidate.get("thingId") and candidate.get("thingId") not in deduped:
             deduped[candidate["thingId"]] = candidate
-    candidates = list(deduped.values())[:16]
-
-    if not candidates:
-        print(json.dumps({"owner": owner, "scannedPosts": len(posts), "drafts": []}))
-    else:
-        prompt = """Draft replies for this Reddit account owner. Return ONLY a JSON array. Each object must contain thingId, shouldReply, draft, and rationale.
-
-Rules:
-- Reply only where the comment directly addresses the owner and a substantive response adds value.
-- Skip jokes, reminders, empty hostility, and comments that need no answer.
-- Match the supplied owner writing examples: direct, candid, technically literate, and human.
-- Answer the actual point first. Do not open with generic praise or "thanks for asking".
-- Never invent product behavior, performance, customers, returns, pricing, technical guarantees, or validation methods.
-- A product claim is allowed only when it appears explicitly in the supplied post context or owner style examples.
-- When facts are insufficient, answer narrowly, state the limitation, or ask a useful clarifying question.
-- Do not sound promotional unless the commenter explicitly asks how to access something.
-- No em dash characters. No emoji. No mention of AI drafting, automation, or this queue.
-- Keep most replies between 40 and 180 words.
-"""
-        prompt += "\nPOST CONTEXT:\n" + json.dumps(post_contexts)
-        prompt += "\n\nOWNER STYLE EXAMPLES:\n" + json.dumps(style_examples[:24])
-        prompt += "\n\nUNANSWERED COMMENTS:\n" + json.dumps(candidates)
-        llm_response, llm_error = invoke_llm(prompt)
-        if llm_error:
-            print(json.dumps({"error": llm_error}))
-        else:
-            cleaned = llm_response.strip()
-            fence = chr(96) * 3
-            if cleaned.startswith(fence):
-                cleaned = cleaned.split("\n", 1)[1].rsplit(fence, 1)[0]
-                if cleaned.lstrip().startswith("json"):
-                    cleaned = cleaned.lstrip()[4:].lstrip()
-            try:
-                generated = json.loads(cleaned)
-            except Exception as parse_error:
-                print(json.dumps({"error": "Draft generation returned invalid JSON"}))
-            else:
-                source_by_id = {item["thingId"]: item for item in candidates}
-                drafts = []
-                for generated_item in generated if isinstance(generated, list) else []:
-                    source = source_by_id.get(generated_item.get("thingId"))
-                    draft = (generated_item.get("draft") or "").strip()
-                    if not source or not generated_item.get("shouldReply") or not draft:
-                        continue
-                    draft = draft.replace(chr(8212), ",").replace(chr(8211), "-").replace(chr(8209), "-")
-                    drafts.append({**source, "draft": draft, "rationale": generated_item.get("rationale") or ""})
-                print(json.dumps({"owner": owner, "scannedPosts": len(posts), "drafts": drafts[:12]}))`;
+    print(json.dumps({
+        "owner": owner,
+        "accountId": account_id,
+        "scannedPosts": len(posts),
+        "candidates": list(deduped.values())[:40],
+        "postContexts": post_contexts
+    }))`;
 }
 
 export function parseWorkbenchOutput(stdout: string) {
@@ -161,5 +117,5 @@ export function parseWorkbenchOutput(stdout: string) {
       continue;
     }
   }
-  throw new Error("Draft generation returned no usable result");
+  throw new Error("Reddit discovery returned no usable result");
 }

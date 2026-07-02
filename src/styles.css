@@ -144,6 +144,11 @@ button {
   font-size: 13px;
 }
 
+.topbar-sync {
+  color: var(--faint);
+  font-size: 11px;
+}
+
 .connection-dot {
   width: 8px;
   height: 8px;
@@ -247,8 +252,57 @@ button {
   font-size: 16px;
 }
 
+.queue-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 44px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.queue-filters button {
+  position: relative;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  transition: background 150ms ease-out, color 150ms ease-out;
+}
+
+.queue-filters button:last-child {
+  border-right: 0;
+}
+
+.queue-filters button:hover {
+  background: var(--surface);
+  color: var(--ink-soft);
+}
+
+.queue-filters button.is-active {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.queue-filters button.is-active::after {
+  position: absolute;
+  right: 16px;
+  bottom: 0;
+  left: 16px;
+  height: 2px;
+  background: var(--accent);
+  content: "";
+}
+
+.queue-filters span {
+  margin-left: 5px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 .queue-items {
-  max-height: calc(100vh - 302px);
+  max-height: calc(100vh - 346px);
   overflow-y: auto;
   scrollbar-color: var(--rule-strong) transparent;
   scrollbar-width: thin;
@@ -795,7 +849,8 @@ button {
 
   .queue-title,
   .ready-count,
-  .topbar-status {
+  .topbar-status,
+  .topbar-sync {
     display: none;
   }
 
