@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./lib/api";
 
 type QueueStatus = "awaiting" | "sending" | "sent" | "skipped";
@@ -131,6 +131,7 @@ export default function App() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const saveTimer = useRef<number | null>(null);
 
   const latest = useMemo(
     () => awaiting.filter((item) => item.batchId === latestBatchId),
@@ -157,6 +158,10 @@ export default function App() {
     setSelectedId((current) => visible.some((item) => item.thingId === current) ? current : visible[0]?.thingId || null);
   }, [visible]);
 
+  useEffect(() => () => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+  }, []);
+
   async function loadQueue() {
     setLoading(true);
     setNotice(null);
@@ -181,9 +186,15 @@ export default function App() {
 
   function editSelected(draft: string) {
     if (!selected) return;
+    const thingId = selected.thingId;
     setAwaiting((current) => current.map((item) => (
-      item.thingId === selected.thingId ? { ...item, draft } : item
+      item.thingId === thingId ? { ...item, draft } : item
     )));
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      void saveSelected(thingId, draft);
+    }, 600);
   }
 
   async function saveSelected(thingId: string, draft: string) {
@@ -199,6 +210,14 @@ export default function App() {
     } finally {
       setSavingId(null);
     }
+  }
+
+  function flushSelected(thingId: string, draft: string) {
+    if (saveTimer.current !== null) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    void saveSelected(thingId, draft);
   }
 
   function removeFromQueue(thingId: string) {
@@ -390,7 +409,7 @@ export default function App() {
                   aria-label="Proposed reply"
                   value={selected.draft}
                   onChange={(event) => editSelected(event.target.value.slice(0, 10_000))}
-                  onBlur={(event) => void saveSelected(selected.thingId, event.currentTarget.value)}
+                  onBlur={(event) => flushSelected(selected.thingId, event.currentTarget.value)}
                   maxLength={10_000}
                 />
                 <div className="character-count">
