@@ -1,10 +1,11 @@
 import { hasValidSession } from "./_shared/auth.mts";
 import {
-  composio,
-  composioToolVersion,
-  composioUserId,
-  getLatestRedditAccount,
-} from "./_shared/composio.mts";
+  activeRedditAccount,
+  connectComposio,
+  executeRedditTool,
+  searchReddit,
+  searchSessionId,
+} from "./_shared/composio-connect.mts";
 import { isSameOrigin, json } from "./_shared/http.mts";
 
 const THING_ID = /^t[13]_[a-z0-9]+$/i;
@@ -24,26 +25,23 @@ export default async (request: Request) => {
   }
 
   try {
-    const account = await getLatestRedditAccount();
-    if (!account || account.status !== "ACTIVE") {
-      return json({ error: "Reddit is not connected. Reconnect it before sending." }, 409);
-    }
-
-    const result = await composio("/tools/execute/REDDIT_POST_REDDIT_COMMENT", {
-      method: "POST",
-      body: JSON.stringify({
-        connected_account_id: account.id,
-        user_id: composioUserId(),
-        version: composioToolVersion(),
-        arguments: { thing_id: thingId, text },
-      }),
-    });
-
-    if (!result?.successful) {
-      const message = result?.error || "Reddit did not accept the reply";
+    const client = await connectComposio();
+    const search = await searchReddit(client, ["reply to a specific Reddit comment after human approval"]);
+    const account = activeRedditAccount(search);
+    if (!account) return json({ error: "The connected Reddit account is not active" }, 409);
+    const result = await executeRedditTool(
+      client,
+      account.id,
+      "REDDIT_POST_REDDIT_COMMENT",
+      { thing_id: thingId, text },
+      searchSessionId(search),
+    );
+    const execution = result?.data?.results?.[0]?.response;
+    if (!execution?.successful) {
+      const message = execution?.error || result?.error || "Reddit did not accept the reply";
       return json({ error: typeof message === "string" ? message : "Reddit did not accept the reply" }, 502);
     }
-    return json({ successful: true, data: result.data ?? null, logId: result.log_id ?? null });
+    return json({ successful: true, data: execution.data ?? null });
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Reply could not be sent" }, 502);
   }
