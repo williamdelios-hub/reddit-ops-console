@@ -186,13 +186,13 @@ export default function App() {
     )));
   }
 
-  async function saveSelected() {
-    if (!selected?.draft.trim()) return;
-    setSavingId(selected.thingId);
+  async function saveSelected(thingId: string, draft: string) {
+    if (!draft.trim()) return;
+    setSavingId(thingId);
     try {
       await api("queue-item", {
         method: "POST",
-        body: { action: "edit", thingId: selected.thingId, draft: selected.draft },
+        body: { action: "edit", thingId, draft },
       });
     } catch (error) {
       setNotice({ kind: "error", message: error instanceof Error ? error.message : "Draft edit was not saved" });
@@ -390,7 +390,7 @@ export default function App() {
                   aria-label="Proposed reply"
                   value={selected.draft}
                   onChange={(event) => editSelected(event.target.value.slice(0, 10_000))}
-                  onBlur={() => void saveSelected()}
+                  onBlur={(event) => void saveSelected(selected.thingId, event.currentTarget.value)}
                   maxLength={10_000}
                 />
                 <div className="character-count">
