@@ -11,7 +11,7 @@ If I skip either attachment, continue. Create a restrained default voice profile
 
 OUTCOME
 
-Set up my own private Dispatch deployment from ${REPOSITORY_URL}. Dispatch reads unanswered Reddit comments, drafts replies in my configured voice, and stores them for review. It must never post on a schedule. Only my click on Send reply may publish.
+Set up my own private Dispatch deployment. Use the repository currently open in this coding session. If no Dispatch repository is open, create my own copy from ${REPOSITORY_URL} first. Dispatch reads unanswered Reddit comments, drafts replies in my configured voice, and stores them for review. It must never post on a schedule. Only my click on Send reply may publish.
 
 SETUP CONTRACT
 

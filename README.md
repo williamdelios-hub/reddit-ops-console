@@ -4,6 +4,25 @@ Dispatch is a self-hosted Reddit reply queue for people who want an agent to do 
 
 Codex or Claude Code checks recent threads, writes replies from a private voice profile and product brief, and saves them to a review queue. You edit the words and click **Send reply**. That click is the only publishing path.
 
+## Start here
+
+1. Open the [public Dispatch repository](https://github.com/williamdelios-hub/reddit-ops-console).
+2. Click **Use this template**, then **Create a new repository**.
+3. Make your new repository private unless you specifically want your copy public.
+4. Clone your new repository to your computer.
+5. Open that folder in Codex or Claude Code.
+6. Open the [public setup page](https://reddit-dispatch-console.netlify.app/).
+7. Click **Copy Codex setup** or **Copy Claude Code setup**.
+8. Paste the copied prompt into the coding agent that has your repository open.
+9. Optionally attach two separate files:
+   - A sample of your writing.
+   - A brief describing your product.
+10. Complete the Reddit and Netlify login steps when your agent asks.
+11. The agent deploys your private Dispatch site and gives you its URL and login token.
+12. Open your new site, paste the token, and review your first draft batch.
+
+The public setup page is not a shared dashboard. Every user creates a separate private deployment with separate credentials and a separate Reddit connection.
+
 ## What it does
 
 - Finds unanswered comments across recent posts from one connected Reddit account
@@ -15,7 +34,7 @@ Codex or Claude Code checks recent threads, writes replies from a private voice 
 
 ## Set up with your coding agent
 
-Open the deployed landing page and copy either setup prompt, or give your agent this repository and say:
+Open the public setup page and copy either setup prompt, or give your agent your repository and say:
 
 > Set up Dispatch for me. Follow `docs/SETUP_CONTRACT.md`. Before starting, ask me for a separate optional writing sample and product brief. Do not post anything to Reddit during setup.
 
