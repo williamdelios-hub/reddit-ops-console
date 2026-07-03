@@ -2,6 +2,12 @@
 
 Dispatch is a self-hosted Reddit reply queue for people who want an agent to do the reading and drafting without giving it permission to publish.
 
+## Begin setup
+
+**[Open the Dispatch setup page](https://reddit-dispatch-console.netlify.app/)**
+
+This opens a normal website in your browser. Click **Copy Codex setup** or **Copy Claude Code setup**, then paste the copied instructions into your coding agent.
+
 Codex or Claude Code checks recent threads, writes replies from a private voice profile and product brief, and saves them to a review queue. You edit the words and click **Send reply**. That click is the only publishing path.
 
 ## Start here
